@@ -1,0 +1,249 @@
+[
+    {
+        "id": "f1b8cfa29c0b16dd",
+        "type": "group",
+        "z": "fda6137b3374fbd5",
+        "name": "ZONE 2: Edge Processing & AI (DB Only)",
+        "style": {
+            "stroke": "#ffc107",
+            "fill": "#fff9c4",
+            "label": true
+        },
+        "nodes": [
+            "894deece149d2618",
+            "8612417a216ea72c",
+            "de3539cf7987d99e",
+            "13cdae549ac65845",
+            "102e14ebdbe00281",
+            "087bc304b5b9eb74",
+            "6cb8b38ed24e0dac",
+            "ba0d85beeffd724b",
+            "7d4f2f9a918c3222"
+        ],
+        "x": 34,
+        "y": 359,
+        "w": 1372,
+        "h": 342
+    },
+    {
+        "id": "894deece149d2618",
+        "type": "mqtt in",
+        "z": "fda6137b3374fbd5",
+        "g": "f1b8cfa29c0b16dd",
+        "name": "Sub All Sensors",
+        "topic": "AirQuality/+",
+        "qos": "2",
+        "datatype": "auto-detect",
+        "broker": "beebotte_broker",
+        "nl": false,
+        "rap": false,
+        "inputs": 0,
+        "x": 140,
+        "y": 440,
+        "wires": [
+            [
+                "8612417a216ea72c"
+            ]
+        ]
+    },
+    {
+        "id": "8612417a216ea72c",
+        "type": "function",
+        "z": "fda6137b3374fbd5",
+        "g": "f1b8cfa29c0b16dd",
+        "name": "Smart Aggregator (Python compatible)",
+        "func": "// Récupération topic\nlet topic = msg.topic.split('/')[1]; // ex: 'co2'\n\n// --- ADAPTATION UNIVERSELLE ---\nlet incomingVal;\n\nif (msg.payload && msg.payload.value !== undefined) {\n    incomingVal = msg.payload.value; // Script Python Smart\n} else if (msg.payload && msg.payload.data !== undefined) {\n    incomingVal = msg.payload.data;  // Ancien format\n} else {\n    incomingVal = msg.payload;       // Valeur brute\n}\n\nlet now = Date.now();\nlet context = flow.get('sensor_buffer') || {};\n\n// Stockage\ncontext[topic] = {\n    value: incomingVal,\n    ts: now\n};\nflow.set('sensor_buffer', context);\n\n// Vérification TTL (30s)\nlet required = ['co2', 'pm25', 'temp', 'hum'];\nlet payload = {};\nlet missingOrStale = false;\n\nfor (let sensor of required) {\n    if (!context[sensor]) {\n        missingOrStale = true;\n        node.status({fill:'yellow', shape:'ring', text:'Waiting for ' + sensor});\n        break;\n    }\n    if (now - context[sensor].ts > 30000) {\n        missingOrStale = true;\n        node.status({fill:'red', shape:'dot', text: sensor + ' is STALE!'});\n        break;\n    }\n    payload[sensor] = context[sensor].value;\n}\n\nif (!missingOrStale) {\n    node.status({fill:'green', shape:'dot', text:'Sync OK'});\n    \n    msg.payload = payload;\n    // Headers pour l'API\n    msg.headers = { \"Content-Type\": \"application/json\" };\n    return msg;\n}\n\nreturn null;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 370,
+        "y": 500,
+        "wires": [
+            [
+                "de3539cf7987d99e"
+            ]
+        ]
+    },
+    {
+        "id": "de3539cf7987d99e",
+        "type": "http request",
+        "z": "fda6137b3374fbd5",
+        "g": "f1b8cfa29c0b16dd",
+        "name": "Cloud AI (HuggingFace)",
+        "method": "POST",
+        "ret": "obj",
+        "paytoqs": "ignore",
+        "url": "https://ahyahya1616-fast-api-classification-air.hf.space/predict",
+        "tls": "",
+        "persist": false,
+        "proxy": "",
+        "insecureHTTPParser": false,
+        "authType": "",
+        "senderr": false,
+        "headers": [],
+        "x": 630,
+        "y": 400,
+        "wires": [
+            [
+                "087bc304b5b9eb74"
+            ]
+        ]
+    },
+    {
+        "id": "13cdae549ac65845",
+        "type": "catch",
+        "z": "fda6137b3374fbd5",
+        "g": "f1b8cfa29c0b16dd",
+        "name": "Catch Network Errors",
+        "scope": [
+            "de3539cf7987d99e"
+        ],
+        "x": 480,
+        "y": 580,
+        "wires": [
+            [
+                "102e14ebdbe00281"
+            ]
+        ]
+    },
+    {
+        "id": "102e14ebdbe00281",
+        "type": "function",
+        "z": "fda6137b3374fbd5",
+        "g": "f1b8cfa29c0b16dd",
+        "name": "Fallback: Edge Rule Engine",
+        "func": "let input = flow.get('sensor_buffer');\n// Sécurité pour ne pas planter si input est vide\nif (!input || !input.co2) return null;\n\nlet co2 = input.co2.value;\nlet pm25 = input.pm25.value;\n\nlet prediction = 'Clean';\nif (co2 > 1000 || pm25 > 100) {\n    prediction = 'Polluted';\n}\n\nmsg.payload = {\n    prediction: prediction,\n    probability: [0, 1],\n    fallback_mode: true\n};\n\nnode.warn(\"Cloud AI failed. Using Local Fallback.\");\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 740,
+        "y": 560,
+        "wires": [
+            [
+                "087bc304b5b9eb74"
+            ]
+        ]
+    },
+    {
+        "id": "087bc304b5b9eb74",
+        "type": "function",
+        "z": "fda6137b3374fbd5",
+        "g": "f1b8cfa29c0b16dd",
+        "name": "Formatage FINAL (Split)",
+        "func": "let sensors = flow.get('sensor_buffer');\nlet apiResponse = msg.payload; \n\n// 1. Logique de Prediction\nlet rawPred = apiResponse.prediction;\nlet label = \"Inconnu\";\n\nif (rawPred === 1 || rawPred === \"1\" || apiResponse.label === \"Polluted\") {\n    label = \"Polluted\";\n} else if (rawPred === 0 || rawPred === \"0\" || apiResponse.label === \"Clean\") {\n    label = \"Clean\";\n} else if (typeof rawPred === 'string') {\n    label = rawPred;\n}\n\n// 2. Source\nlet source = apiResponse.fallback_mode ? \"EDGE_LOCAL\" : \"CLOUD_AI\";\n\n// 3. Objet DONNÉES (Pour MongoDB)\nlet cleanPayload = {\n    timestamp: new Date(),\n    sensors: {\n        co2: sensors.co2.value,\n        pm25: sensors.pm25.value,\n        temp: sensors.temp.value,\n        hum: sensors.hum.value\n    },\n    analysis: {\n        prediction: label,\n        raw_value: rawPred,\n        probability: apiResponse.probability ? apiResponse.probability[1] : 0,\n        source: source\n    }\n};\n\n// 4. Objet COMMANDE (Pour le Ventilateur)\nlet fanPayload = (label === \"Polluted\") ? \"ON\" : \"OFF\";\n\n// 5. RETOUR DOUBLE\n// Output 1 (Haut) -> MongoDB\n// Output 2 (Bas) -> Ventilation MQTT\nreturn [ { payload: cleanPayload }, { payload: fanPayload } ];",
+        "outputs": 2,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 930,
+        "y": 440,
+        "wires": [
+            [
+                "6cb8b38ed24e0dac",
+                "7d4f2f9a918c3222"
+            ],
+            [
+                "ba0d85beeffd724b"
+            ]
+        ]
+    },
+    {
+        "id": "6cb8b38ed24e0dac",
+        "type": "debug",
+        "z": "fda6137b3374fbd5",
+        "g": "f1b8cfa29c0b16dd",
+        "name": "SYSTEM STATUS",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 1270,
+        "y": 400,
+        "wires": []
+    },
+    {
+        "id": "ba0d85beeffd724b",
+        "type": "mqtt out",
+        "z": "fda6137b3374fbd5",
+        "g": "f1b8cfa29c0b16dd",
+        "name": "Action: Ventilation",
+        "topic": "Building/Ventilation",
+        "qos": "",
+        "retain": "",
+        "respTopic": "",
+        "contentType": "",
+        "userProps": "",
+        "correl": "",
+        "expiry": "",
+        "broker": "beebotte_broker",
+        "x": 1250,
+        "y": 540,
+        "wires": []
+    },
+    {
+        "id": "7d4f2f9a918c3222",
+        "type": "mongodb out",
+        "z": "fda6137b3374fbd5",
+        "g": "f1b8cfa29c0b16dd",
+        "mongodb": "mongo_config",
+        "name": "Archive Mongo",
+        "collection": "readings_v2",
+        "payonly": true,
+        "upsert": false,
+        "multi": false,
+        "operation": "insert",
+        "x": 1260,
+        "y": 460,
+        "wires": []
+    },
+    {
+        "id": "beebotte_broker",
+        "type": "mqtt-broker",
+        "name": "Local Mosquitto",
+        "broker": "127.0.0.1",
+        "port": "1883",
+        "clientid": "",
+        "autoConnect": true,
+        "usetls": false,
+        "protocolVersion": "4",
+        "keepalive": "60",
+        "cleansession": true,
+        "autoUnsubscribe": true,
+        "birthTopic": "",
+        "birthQos": "0",
+        "birthPayload": "",
+        "birthMsg": {},
+        "closeTopic": "",
+        "closeQos": "0",
+        "closePayload": "",
+        "closeMsg": {},
+        "willTopic": "",
+        "willQos": "0",
+        "willPayload": "",
+        "willMsg": {},
+        "userProps": "",
+        "sessionExpiry": ""
+    },
+    {
+        "id": "mongo_config",
+        "type": "mongodb",
+        "hostname": "cluster0.tdovvso.mongodb.net/?appName=Cluster0",
+        "topology": "dnscluster",
+        "connectOptions": "",
+        "port": "27017",
+        "db": "air_quality_db",
+        "name": "Atlas Cloud"
+    }
+]
