@@ -1,39 +1,39 @@
 [
     {
-        "id": "99f959aa712e081d",
+        "id": "group_process",
         "type": "group",
         "z": "fda6137b3374fbd5",
-        "name": "ZONE 2: Edge Processing (Format Payload)",
+        "name": "ZONE 2: Edge Intelligence & Database",
         "style": {
-            "stroke": "#ffc107",
-            "fill": "#fff9c4",
+            "stroke": "#ff9800",
+            "fill": "#fff3e0",
             "label": true
         },
         "nodes": [
-            "a037395efcb60421",
-            "a7d979000de7ee5c",
-            "a880ec0477886e06",
-            "fccb3024dfa6ab5c",
-            "3b606db571496ba5",
-            "bb53a52279a8c8e7",
-            "5a3333232a19b3c6",
-            "fdc10c0f8912c526",
-            "680d034af8edd574",
-            "d0f1a5226c6d8dd7",
-            "d0f2ac0021dbf1b2",
-            "20dbdae09b8485c4",
-            "cbcbc7855ad04e49"
+            "mqtt_in_all",
+            "func_aggregator",
+            "req_cloud_ai",
+            "catch_net_err",
+            "func_fallback",
+            "func_format_final",
+            "debug_system",
+            "mqtt_out_fan",
+            "mongo_out_reading",
+            "switch_critical",
+            "delay_spam",
+            "func_email",
+            "node_email"
         ],
         "x": 14,
-        "y": 159,
-        "w": 1892,
-        "h": 262
+        "y": 299,
+        "w": 1872,
+        "h": 282
     },
     {
-        "id": "a037395efcb60421",
+        "id": "mqtt_in_all",
         "type": "mqtt in",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
+        "g": "group_process",
         "name": "Sub All Sensors",
         "topic": "AirQuality/+",
         "qos": "2",
@@ -43,20 +43,20 @@
         "rap": false,
         "inputs": 0,
         "x": 120,
-        "y": 240,
+        "y": 400,
         "wires": [
             [
-                "a7d979000de7ee5c"
+                "func_aggregator"
             ]
         ]
     },
     {
-        "id": "a7d979000de7ee5c",
+        "id": "func_aggregator",
         "type": "function",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
-        "name": "Smart Aggregator (Python compatible)",
-        "func": "// Récupération topic\nlet topic = msg.topic.split('/')[1];\n\n// --- ADAPTATION UNIVERSELLE ---\nlet incomingVal;\nif (msg.payload && msg.payload.value !== undefined) {\n    incomingVal = msg.payload.value;\n} else if (msg.payload && msg.payload.data !== undefined) {\n    incomingVal = msg.payload.data;\n} else {\n    incomingVal = msg.payload;\n}\n\nlet now = Date.now();\nlet context = flow.get('sensor_buffer') || {};\n\ncontext[topic] = {\n    value: incomingVal,\n    ts: now\n};\nflow.set('sensor_buffer', context);\n\nlet required = ['co2', 'pm25', 'temp', 'hum'];\nlet payload = {};\nlet missingOrStale = false;\n\nfor (let sensor of required) {\n    if (!context[sensor]) {\n        missingOrStale = true;\n        node.status({fill:'yellow', shape:'ring', text:'Waiting for ' + sensor});\n        break;\n    }\n    if (now - context[sensor].ts > 30000) {\n        missingOrStale = true;\n        node.status({fill:'red', shape:'dot', text: sensor + ' is STALE!'});\n        break;\n    }\n    payload[sensor] = context[sensor].value;\n}\n\nif (!missingOrStale) {\n    node.status({fill:'green', shape:'dot', text:'Sync OK'});\n    msg.payload = payload;\n    msg.headers = { \"Content-Type\": \"application/json\" };\n    return msg;\n}\nreturn null;",
+        "g": "group_process",
+        "name": "Smart Aggregator",
+        "func": "// Récupération topic\nlet topic = msg.topic.split('/')[1];\n\n// Extraction valeur\nlet incomingVal;\nif (msg.payload && msg.payload.value !== undefined) {\n    incomingVal = msg.payload.value;\n} else {\n    incomingVal = msg.payload;\n}\n\nlet now = Date.now();\nlet context = flow.get('sensor_buffer') || {};\n\ncontext[topic] = {\n    value: incomingVal,\n    ts: now\n};\nflow.set('sensor_buffer', context);\n\nlet required = ['co2', 'pm25', 'temp', 'hum'];\nlet payload = {};\nlet missing = false;\n\nfor (let sensor of required) {\n    if (!context[sensor] || (now - context[sensor].ts > 30000)) {\n        missing = true;\n        node.status({fill:'yellow', shape:'ring', text:'Wait/Stale: ' + sensor});\n        break;\n    }\n    payload[sensor] = context[sensor].value;\n}\n\nif (!missing) {\n    node.status({fill:'green', shape:'dot', text:'Sync OK'});\n    msg.payload = payload;\n    return msg;\n}\nreturn null;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -64,19 +64,19 @@
         "finalize": "",
         "libs": [],
         "x": 350,
-        "y": 300,
+        "y": 460,
         "wires": [
             [
-                "a880ec0477886e06"
+                "req_cloud_ai"
             ]
         ]
     },
     {
-        "id": "a880ec0477886e06",
+        "id": "req_cloud_ai",
         "type": "http request",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
-        "name": "Cloud AI (HuggingFace)",
+        "g": "group_process",
+        "name": "Cloud AI",
         "method": "POST",
         "ret": "obj",
         "paytoqs": "ignore",
@@ -88,38 +88,38 @@
         "authType": "",
         "senderr": false,
         "headers": [],
-        "x": 610,
-        "y": 200,
+        "x": 600,
+        "y": 360,
         "wires": [
             [
-                "bb53a52279a8c8e7"
+                "func_format_final"
             ]
         ]
     },
     {
-        "id": "fccb3024dfa6ab5c",
+        "id": "catch_net_err",
         "type": "catch",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
-        "name": "Catch Network Errors",
+        "g": "group_process",
+        "name": "Catch Errors",
         "scope": [
-            "a880ec0477886e06"
+            "req_cloud_ai"
         ],
-        "x": 460,
-        "y": 380,
+        "x": 470,
+        "y": 540,
         "wires": [
             [
-                "3b606db571496ba5"
+                "func_fallback"
             ]
         ]
     },
     {
-        "id": "3b606db571496ba5",
+        "id": "func_fallback",
         "type": "function",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
-        "name": "Fallback: Edge Rule Engine",
-        "func": "let input = flow.get('sensor_buffer');\nif (!input || !input.co2) return null;\n\nlet co2 = input.co2.value;\nlet pm25 = input.pm25.value;\n\nlet prediction = 'Clean';\nif (co2 > 1000 || pm25 > 100) {\n    prediction = 'Polluted';\n}\n\nmsg.payload = {\n    prediction: prediction,\n    probability: [0, 1],\n    fallback_mode: true\n};\n\nnode.warn(\"Cloud AI failed. Using Local Fallback.\");\nreturn msg;",
+        "g": "group_process",
+        "name": "Fallback Logic",
+        "func": "let input = flow.get('sensor_buffer');\nlet co2 = input.co2.value;\nlet pm25 = input.pm25.value;\n\nlet prediction = 'Clean';\nif (co2 > 1000 || pm25 > 100) {\n    prediction = 'Polluted';\n}\n\nmsg.payload = {\n    prediction: prediction,\n    probability: [0, 1],\n    fallback_mode: true\n};\n\nnode.warn(\"Cloud AI failed. Using Local Fallback.\");\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
@@ -127,45 +127,45 @@
         "finalize": "",
         "libs": [],
         "x": 720,
-        "y": 360,
+        "y": 520,
         "wires": [
             [
-                "bb53a52279a8c8e7"
+                "func_format_final"
             ]
         ]
     },
     {
-        "id": "bb53a52279a8c8e7",
+        "id": "func_format_final",
         "type": "function",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
-        "name": "Formatage FINAL (Split)",
-        "func": "let sensors = flow.get('sensor_buffer');\nlet apiResponse = msg.payload; \n\nlet rawPred = apiResponse.prediction;\nlet label = \"Inconnu\";\n\nif (rawPred === 1 || rawPred === \"1\" || apiResponse.label === \"Polluted\") {\n    label = \"Polluted\";\n} else if (rawPred === 0 || rawPred === \"0\" || apiResponse.label === \"Clean\") {\n    label = \"Clean\";\n} else if (typeof rawPred === 'string') {\n    label = rawPred;\n}\n\nlet source = apiResponse.fallback_mode ? \"EDGE_LOCAL\" : \"CLOUD_AI\";\n\nlet cleanPayload = {\n    timestamp: new Date(),\n    sensors: {\n        co2: sensors.co2.value,\n        pm25: sensors.pm25.value,\n        temp: sensors.temp.value,\n        hum: sensors.hum.value\n    },\n    analysis: {\n        prediction: label,\n        raw_value: rawPred,\n        probability: apiResponse.probability ? apiResponse.probability[1] : 0,\n        source: source\n    }\n};\n\nlet fanPayload = (label === \"Polluted\") ? \"ON\" : \"OFF\";\n\n// Output 1 -> DB, Output 2 -> Action & Alert\nreturn [ { payload: cleanPayload }, { payload: fanPayload } ];",
+        "g": "group_process",
+        "name": "Formatage & Décision",
+        "func": "let sensors = flow.get('sensor_buffer');\nlet apiResponse = msg.payload; \n\n// 1. Interprétation de la réponse IA/Fallback\nlet rawPred = apiResponse.prediction;\nlet label = \"Inconnu\";\n\nif (rawPred === 1 || rawPred === \"1\" || apiResponse.label === \"Polluted\" || rawPred === \"Polluted\") {\n    label = \"Polluted\";\n} else {\n    label = \"Clean\";\n}\n\nlet source = apiResponse.fallback_mode ? \"EDGE_LOCAL\" : \"CLOUD_AI\";\n\n// 2. Décision Actuateur (Logique Métier)\n// Si Pollué => ON, Sinon => OFF\nlet fanAction = (label === \"Polluted\") ? \"ON\" : \"OFF\";\n\n// 3. Construction de l'objet pour MONGODB (Collection Readings)\nlet dbRecord = {\n    timestamp: new Date(),\n    sensors: {\n        co2: sensors.co2.value,\n        pm25: sensors.pm25.value,\n        temp: sensors.temp.value,\n        hum: sensors.hum.value\n    },\n    actuators: {\n        ventilation: fanAction // <--- STOCKAGE DE L'ACTION\n    },\n    analysis: {\n        prediction: label,\n        probability: apiResponse.probability ? apiResponse.probability[1] : 0,\n        source: source\n    }\n};\n\n// 4. Construction de l'objet pour MQTT (Actuateur Physique)\nlet mqttPayload = fanAction;\n\n// Sorties : \n// 1 -> Mongo (objet complet)\n// 2 -> MQTT & Alertes (juste ON/OFF)\nreturn [ { payload: dbRecord }, { payload: mqttPayload } ];",
         "outputs": 2,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 910,
-        "y": 240,
+        "x": 920,
+        "y": 400,
         "wires": [
             [
-                "5a3333232a19b3c6",
-                "680d034af8edd574"
+                "mongo_out_reading",
+                "debug_system"
             ],
             [
-                "fdc10c0f8912c526",
-                "d0f1a5226c6d8dd7"
+                "mqtt_out_fan",
+                "switch_critical"
             ]
         ]
     },
     {
-        "id": "5a3333232a19b3c6",
+        "id": "debug_system",
         "type": "debug",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
-        "name": "SYSTEM STATUS",
+        "g": "group_process",
+        "name": "DB Payload",
         "active": true,
         "tosidebar": true,
         "console": false,
@@ -174,16 +174,16 @@
         "targetType": "msg",
         "statusVal": "",
         "statusType": "auto",
-        "x": 1250,
-        "y": 200,
+        "x": 1210,
+        "y": 340,
         "wires": []
     },
     {
-        "id": "fdc10c0f8912c526",
+        "id": "mqtt_out_fan",
         "type": "mqtt out",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
-        "name": "Action: Ventilation",
+        "g": "group_process",
+        "name": "Actuateur: Ventilation",
         "topic": "Building/Ventilation",
         "qos": "",
         "retain": "",
@@ -193,32 +193,32 @@
         "correl": "",
         "expiry": "",
         "broker": "beebotte_broker",
-        "x": 1250,
-        "y": 300,
+        "x": 1240,
+        "y": 460,
         "wires": []
     },
     {
-        "id": "680d034af8edd574",
+        "id": "mongo_out_reading",
         "type": "mongodb out",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
+        "g": "group_process",
         "mongodb": "mongo_config",
-        "name": "Archive Mongo",
-        "collection": "readings_v2",
-        "payonly": false,
+        "name": "Insert Reading",
+        "collection": "readings",
+        "payonly": true,
         "upsert": false,
         "multi": false,
         "operation": "insert",
-        "x": 1440,
-        "y": 260,
+        "x": 1340,
+        "y": 400,
         "wires": []
     },
     {
-        "id": "d0f1a5226c6d8dd7",
+        "id": "switch_critical",
         "type": "switch",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
-        "name": "If CRITICAL (ON)",
+        "g": "group_process",
+        "name": "If CRITICAL",
         "property": "payload",
         "propertyType": "msg",
         "rules": [
@@ -232,19 +232,19 @@
         "repair": false,
         "outputs": 1,
         "x": 1110,
-        "y": 380,
+        "y": 540,
         "wires": [
             [
-                "d0f2ac0021dbf1b2"
+                "delay_spam"
             ]
         ]
     },
     {
-        "id": "d0f2ac0021dbf1b2",
+        "id": "delay_spam",
         "type": "delay",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
-        "name": "Anti-Spam (2 min)",
+        "g": "group_process",
+        "name": "Anti-Spam",
         "pauseType": "rate",
         "timeout": "5",
         "timeoutUnits": "seconds",
@@ -258,39 +258,39 @@
         "allowrate": false,
         "outputs": 1,
         "x": 1310,
-        "y": 380,
+        "y": 540,
         "wires": [
             [
-                "20dbdae09b8485c4"
+                "func_email"
             ]
         ]
     },
     {
-        "id": "20dbdae09b8485c4",
+        "id": "func_email",
         "type": "function",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
-        "name": "Rédiger Email Alert",
-        "func": "msg.topic = \"🚨 ALERTE CRITIQUE : Qualité de l'Air\";\n\nmsg.payload = \"⚠️ ATTENTION ⚠️\\n\\n\" +\n              \"Une pollution anormale a été détectée dans l'usine.\\n\" +\n              \"Niveau de risque : ÉLEVÉ\\n\" +\n              \"Action automatique : La ventilation a été ACTIVÉE.\\n\\n\" +\n              \"Heure de l'incident : \" + new Date().toLocaleTimeString() + \"\\n\\n\" +\n              \"Ceci est un message automatique du système EcoSense-AI.\";\n\nreturn msg;",
+        "g": "group_process",
+        "name": "Rédiger Email",
+        "func": "msg.topic = \"🚨 ALERTE : Ventilation Activée\";\nmsg.payload = \"La qualité de l'air est dégradée. La ventilation a été démarrée automatiquement.\";\nreturn msg;",
         "outputs": 1,
         "timeout": "",
         "noerr": 0,
         "initialize": "",
         "finalize": "",
         "libs": [],
-        "x": 1510,
-        "y": 380,
+        "x": 1500,
+        "y": 540,
         "wires": [
             [
-                "cbcbc7855ad04e49"
+                "node_email"
             ]
         ]
     },
     {
-        "id": "cbcbc7855ad04e49",
+        "id": "node_email",
         "type": "e-mail",
         "z": "fda6137b3374fbd5",
-        "g": "99f959aa712e081d",
+        "g": "group_process",
         "server": "smtp.gmail.com",
         "port": "465",
         "authtype": "BASIC",
@@ -300,8 +300,8 @@
         "tls": true,
         "name": "ahmaneyahya10@gmail.com",
         "dname": "",
-        "x": 1760,
-        "y": 300,
+        "x": 1740,
+        "y": 540,
         "wires": []
     },
     {
@@ -343,7 +343,182 @@
         "name": "Atlas Cloud"
     },
     {
-        "id": "9632faf5ba908f87",
+        "id": "group_health",
+        "type": "group",
+        "z": "fda6137b3374fbd5",
+        "name": "ZONE 3: Monitoring État Capteurs (Watchdog)",
+        "style": {
+            "stroke": "#e91e63",
+            "fill": "#fce4ec",
+            "label": true
+        },
+        "nodes": [
+            "mqtt_health_in",
+            "trigger_watchdog",
+            "func_set_broken",
+            "func_set_working",
+            "rate_limit_working",
+            "mongo_update_status",
+            "debug_status"
+        ],
+        "x": 14,
+        "y": 619,
+        "w": 1012,
+        "h": 222
+    },
+    {
+        "id": "mqtt_health_in",
+        "type": "mqtt in",
+        "z": "fda6137b3374fbd5",
+        "g": "group_health",
+        "name": "Listen Activity",
+        "topic": "AirQuality/+",
+        "qos": "0",
+        "datatype": "auto-detect",
+        "broker": "beebotte_broker",
+        "nl": false,
+        "rap": false,
+        "inputs": 0,
+        "x": 110,
+        "y": 700,
+        "wires": [
+            [
+                "trigger_watchdog",
+                "rate_limit_working"
+            ]
+        ]
+    },
+    {
+        "id": "trigger_watchdog",
+        "type": "trigger",
+        "z": "fda6137b3374fbd5",
+        "g": "group_health",
+        "name": "Watchdog (60s)",
+        "op1": "",
+        "op2": "TIMEOUT",
+        "op1type": "nul",
+        "op2type": "str",
+        "duration": "60",
+        "extend": true,
+        "overrideDelay": false,
+        "units": "s",
+        "reset": "",
+        "bytopic": "all",
+        "topic": "topic",
+        "outputs": 1,
+        "x": 340,
+        "y": 760,
+        "wires": [
+            [
+                "func_set_broken"
+            ]
+        ]
+    },
+    {
+        "id": "func_set_broken",
+        "type": "function",
+        "z": "fda6137b3374fbd5",
+        "g": "group_health",
+        "name": "Set: BROKEN",
+        "func": "// 1. Définir QUI on met à jour\nmsg.query = { type: 'sensor' };\n\n// 2. Définir QUOI mettre à jour\nmsg.payload = { \n    $set: { \n        status: 'broken', \n        current_state: 'OFF'\n    } \n};\n\n// 3. Forcer l'opération 'updateMany'\nmsg.operation = 'updateMany';\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 590,
+        "y": 760,
+        "wires": [
+            [
+                "mongo_update_status",
+                "debug_status"
+            ]
+        ]
+    },
+    {
+        "id": "func_set_working",
+        "type": "function",
+        "z": "fda6137b3374fbd5",
+        "g": "group_health",
+        "name": "Set: WORKING",
+        "func": "// 1. Définir QUI on met à jour (La requête)\nmsg.query = { type: 'sensor' };\n\n// 2. Définir QUOI mettre à jour (L'action)\nmsg.payload = { \n    $set: { \n        status: 'working',\n        current_state: 'ON',\n        last_communication: new Date()\n    } \n};\n\n// 3. Forcer l'opération 'updateMany' pour modifier tous les capteurs d'un coup\n// Cela surcharge la configuration du noeud Mongo\nmsg.operation = 'updateMany';\n\nreturn msg;",
+        "outputs": 1,
+        "timeout": "",
+        "noerr": 0,
+        "initialize": "",
+        "finalize": "",
+        "libs": [],
+        "x": 600,
+        "y": 660,
+        "wires": [
+            [
+                "mongo_update_status"
+            ]
+        ]
+    },
+    {
+        "id": "rate_limit_working",
+        "type": "delay",
+        "z": "fda6137b3374fbd5",
+        "g": "group_health",
+        "name": "1 update / min",
+        "pauseType": "rate",
+        "timeout": "5",
+        "timeoutUnits": "seconds",
+        "rate": "1",
+        "nbRateUnits": "1",
+        "rateUnits": "minute",
+        "randomFirst": "1",
+        "randomLast": "5",
+        "randomUnits": "seconds",
+        "drop": true,
+        "allowrate": false,
+        "outputs": 1,
+        "x": 340,
+        "y": 660,
+        "wires": [
+            [
+                "func_set_working"
+            ]
+        ]
+    },
+    {
+        "id": "mongo_update_status",
+        "type": "mongodb out",
+        "z": "fda6137b3374fbd5",
+        "g": "group_health",
+        "mongodb": "mongo_config",
+        "name": "Update Hardware",
+        "collection": "hardwares",
+        "payonly": true,
+        "upsert": false,
+        "multi": true,
+        "operation": "update",
+        "x": 910,
+        "y": 700,
+        "wires": []
+    },
+    {
+        "id": "debug_status",
+        "type": "debug",
+        "z": "fda6137b3374fbd5",
+        "g": "group_health",
+        "name": "ALERT: SENSORS LOST",
+        "active": true,
+        "tosidebar": true,
+        "console": false,
+        "tostatus": false,
+        "complete": "payload",
+        "targetType": "msg",
+        "statusVal": "",
+        "statusType": "auto",
+        "x": 870,
+        "y": 800,
+        "wires": []
+    },
+    {
+        "id": "1a8bbf298d11ea14",
         "type": "global-config",
         "env": [],
         "modules": {
